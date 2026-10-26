@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Upload, Sparkles, Download, ArrowLeft, Image as ImageIcon, ShieldCheck } from 'lucide-react';
+import { Camera, Upload, Sparkles, Download, ArrowLeft, Image as ImageIcon, ShieldCheck, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import CameraCapture from './CameraCapture';
 import Lightbox from './Lightbox';
 
-export default function GuestView({ eventSlug, onBackToAdmin }) {
+export default function GuestView({ eventSlug, initialMatchedPhotos = null, onBack }) {
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -12,22 +12,34 @@ export default function GuestView({ eventSlug, onBackToAdmin }) {
   // Search state
   const [showCamera, setShowCamera] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [searchResults, setSearchResults] = useState(null);
-  const [searchMessage, setSearchMessage] = useState('');
+  const [searchResults, setSearchResults] = useState(initialMatchedPhotos);
+  const [searchMessage, setSearchMessage] = useState(
+    initialMatchedPhotos && initialMatchedPhotos.length > 0 
+      ? `${initialMatchedPhotos.length} photo(s) identifiée(s) pour votre profil.` 
+      : ''
+  );
   const [selfiePreview, setSelfiePreview] = useState(null);
+
+  // Active tab: 'matches' (Mes photos) or 'all' (Toutes les photos)
+  const [activeTab, setActiveTab] = useState(initialMatchedPhotos && initialMatchedPhotos.length > 0 ? 'matches' : 'all');
 
   // Full gallery
   const [allPhotos, setAllPhotos] = useState([]);
-  const [showAllPhotos, setShowAllPhotos] = useState(false);
   const [downloadingZip, setDownloadingZip] = useState(false);
 
   // Lightbox
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(null);
-  const [lightboxMode, setLightboxMode] = useState('matches');
 
   useEffect(() => {
     fetchEvent();
   }, [eventSlug]);
+
+  useEffect(() => {
+    if (initialMatchedPhotos && initialMatchedPhotos.length > 0) {
+      setSearchResults(initialMatchedPhotos);
+      setActiveTab('matches');
+    }
+  }, [initialMatchedPhotos]);
 
   const fetchEvent = async () => {
     try {
@@ -76,7 +88,8 @@ export default function GuestView({ eventSlug, onBackToAdmin }) {
     try {
       const formData = new FormData();
       formData.append('selfie_base64', base64Image);
-      formData.append('threshold', '0.36');
+      // Strict matching threshold 0.44 to prevent false likeness
+      formData.append('threshold', '0.44');
 
       const res = await fetch(`/api/events/${eventSlug}/search-by-face`, {
         method: 'POST',
@@ -86,6 +99,7 @@ export default function GuestView({ eventSlug, onBackToAdmin }) {
       const data = await res.json();
       setSearchResults(data.matches || []);
       setSearchMessage(data.message || '');
+      setActiveTab('matches');
 
       if (data.matches && data.matches.length > 0) {
         confetti({
@@ -147,261 +161,183 @@ export default function GuestView({ eventSlug, onBackToAdmin }) {
         <h2 className="text-3xl font-bold uppercase tracking-[-0.05em] text-white mb-2">Cérémonie introuvable</h2>
         <p className="text-xs text-[#ababab] mb-6">Le lien suivi est introuvable ou a été archivé.</p>
         <button
-          onClick={onBackToAdmin}
+          onClick={onBack}
           className="godthic-pill"
         >
-          RETOUR AU STUDIO
+          RETOUR À L'ACCUEIL
         </button>
       </div>
     );
   }
 
-  const activePhotos = lightboxMode === 'matches' ? (searchResults || []) : allPhotos;
-  const currentLightboxPhoto = selectedPhotoIndex !== null ? activePhotos[selectedPhotoIndex] : null;
+  // Active photos list for grid and lightbox
+  const displayedPhotos = activeTab === 'matches' ? (searchResults || []) : allPhotos;
+  const currentLightboxPhoto = selectedPhotoIndex !== null ? displayedPhotos[selectedPhotoIndex] : null;
 
   return (
     <div className="min-h-screen bg-black text-white pb-28 presence-gradient relative">
-      {/* Navbar Style ggodthicc.com */}
+      {/* Top Header */}
       <header className="sticky top-0 z-40 flex items-center justify-between px-6 sm:px-12 py-4 border-b border-white/15 bg-black/80 backdrop-blur-xl">
         <div className="flex items-center gap-4">
           <img
             src="/logos/logo-godthic-metal.png"
             alt="GODTHIC"
             className="h-8 w-auto object-contain cursor-pointer hover:opacity-85 transition"
-            onClick={onBackToAdmin}
+            onClick={onBack}
           />
           <span className="hidden sm:inline-block w-[1px] h-5 bg-white/20"></span>
           <span className="hidden sm:inline-block font-mono text-[11px] uppercase tracking-widest text-[#ababab]">
-            Galerie Privée
+            {event.title}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            onClick={onBackToAdmin}
-            className="godthic-pill"
+            onClick={onBack}
+            className="godthic-pill text-xs py-2 px-4"
           >
-            <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> STUDIO
+            <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> RETOUR
           </button>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="relative pt-16 pb-16 px-6 sm:px-12 text-center overflow-hidden">
+      <section className="relative pt-12 pb-10 px-6 sm:px-12 text-center overflow-hidden">
         <div className="max-w-4xl mx-auto">
-          <p className="kicker mb-3">
-            ARCHIVE OFFICIELLE // SYSTÈME BIOMÉTRIQUE
+          <p className="kicker mb-2">
+            ARCHIVE OFFICIELLE // HAUTE DÉFINITION
           </p>
 
-          <h1 className="text-4xl sm:text-7xl font-bold tracking-[-0.075em] leading-[0.85] text-white uppercase mb-6">
+          <h1 className="text-3xl sm:text-6xl font-bold tracking-[-0.075em] leading-[0.9] text-white uppercase mb-4">
             {event.title}
           </h1>
 
-          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-[#ababab]">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs font-mono text-[#888]">
             {event.event_date && <span>DATE : {event.event_date}</span>}
             {event.location && <span>LIEU : {event.location}</span>}
-            <span>{allPhotos.length} CLICHÉS HAUTE RÉSOLUTION</span>
+            <span>{allPhotos.length} CLICHÉS ORIGINAUX</span>
           </div>
         </div>
       </section>
 
-      {/* Face Search Box */}
-      <section className="max-w-2xl mx-auto px-6 -mt-4 mb-16">
-        <div className="godthic-glass rounded-3xl p-8 sm:p-12 relative overflow-hidden">
-          <div className="text-center mb-8">
-            <p className="kicker mb-2">SCAN BIOMÉTRIQUE SANS CONTACT</p>
-            <h2 className="text-2xl sm:text-4xl font-bold tracking-[-0.05em] uppercase text-white">
-              Retrouvez Vos Photos
-            </h2>
-            <p className="text-xs sm:text-sm text-[#d0d0d0] mt-3 max-w-md mx-auto leading-relaxed">
-              Placez-vous devant la caméra. Dès que l'angle et la lumière sont parfaits, la photo se déclenche automatiquement sans toucher l'écran.
+      {/* If no scan yet for this ceremony, show quick scan banner */}
+      {searchResults === null && (
+        <section className="max-w-2xl mx-auto px-6 mb-10">
+          <div className="godthic-glass rounded-3xl p-6 sm:p-8 text-center border border-white/15">
+            <p className="kicker mb-1">ISOLER MES PHOTOS</p>
+            <h3 className="text-xl sm:text-2xl font-bold uppercase text-white mb-2">
+              Vous êtes sur ces clichés ?
+            </h3>
+            <p className="text-xs text-[#ababab] mb-6">
+              Lancez le scan facial automatique pour n'afficher que les photos où vous apparaissez.
             </p>
-          </div>
-
-          {/* Action buttons */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <button
-              onClick={() => setShowCamera(true)}
-              disabled={analyzing}
-              className="godthic-pill-red justify-center py-4 text-xs tracking-wider"
-            >
-              <Camera className="w-4 h-4 mr-2" />
-              SCAN FACIAL AUTO
-            </button>
-
-            <label className="godthic-pill justify-center py-4 text-xs tracking-wider cursor-pointer">
-              <Upload className="w-4 h-4 mr-2 text-[#ababab]" />
-              <span>CHARGER UNE PHOTO</span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
-                disabled={analyzing}
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          {/* Privacy reassurance */}
-          <div className="flex items-center justify-center gap-2 text-[11px] text-[#ababab] pt-4 border-t border-white/10">
-            <ShieldCheck className="w-4 h-4 text-[#f00000]" />
-            <span>CONFIDENTIALITÉ : Le selfie sert exclusivement à la recherche en direct et n'est jamais conservé.</span>
-          </div>
-
-          {/* Analyzing HUD line */}
-          {analyzing && (
-            <div className="mt-6 p-4 rounded-2xl bg-black/80 border border-[#f00000]/40 relative overflow-hidden flex items-center justify-center gap-3">
-              <div className="absolute left-0 right-0 h-[2px] bg-[#f00000] shadow-[0_0_12px_#f00000] animate-scan-laser"></div>
-              <div className="w-4 h-4 border-2 border-[#f00000] border-t-transparent rounded-full animate-spin"></div>
-              <span className="font-mono text-xs text-[#f00000] font-bold tracking-wider">
-                EXTRACTION VECTORIELLE DU VISAGE EN COURS...
-              </span>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={() => setShowCamera(true)}
+                className="godthic-pill-red text-xs py-3 px-6"
+              >
+                <Camera className="w-4 h-4 mr-2" /> SCANNER MON VISAGE
+              </button>
             </div>
-          )}
-        </div>
-      </section>
-
-      {/* Search Results Gallery */}
-      {searchResults !== null && (
-        <section className="max-w-6xl mx-auto px-6 sm:px-12 mb-16">
-          <div className="godthic-glass rounded-3xl p-8 sm:p-12">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-10 pb-6 border-b border-white/10">
-              <div>
-                <p className="kicker">RÉSULTAT PERSONNALISÉ</p>
-                <h3 className="text-3xl sm:text-5xl font-bold tracking-[-0.06em] uppercase text-white mt-1">
-                  {searchResults.length > 0 ? (
-                    <>✨ {searchResults.length} photo{searchResults.length > 1 ? 's' : ''} trouvée{searchResults.length > 1 ? 's' : ''}</>
-                  ) : (
-                    "Aucune photo trouvée"
-                  )}
-                </h3>
-                <p className="text-xs text-[#ababab] mt-2">{searchMessage}</p>
-              </div>
-
-              {searchResults.length > 0 && (
-                <button
-                  onClick={() => handleDownloadZip(searchResults)}
-                  disabled={downloadingZip}
-                  className="godthic-pill-red py-3.5 px-6"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  {downloadingZip ? "CRÉATION DU ZIP HD..." : "TOUT TÉLÉCHARGER EN HD (.ZIP)"}
-                </button>
-              )}
-            </div>
-
-            {searchResults.length === 0 ? (
-              <div className="text-center py-12 text-[#ababab]">
-                <p className="text-sm mb-4">
-                  Aucun visage correspondant n'a été identifié. Essayez avec un selfie mieux éclairé et de face.
-                </p>
-                <button
-                  onClick={() => setShowCamera(true)}
-                  className="godthic-pill"
-                >
-                  NOUVEAU SELFIE
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
-                {searchResults.map((photo, idx) => (
-                  <div
-                    key={photo.id}
-                    className="godthic-glass-card rounded-2xl overflow-hidden aspect-[4/5] relative cursor-pointer group"
-                    onClick={() => {
-                      setLightboxMode('matches');
-                      setSelectedPhotoIndex(idx);
-                    }}
-                  >
-                    <img
-                      src={photo.file_path_thumb || photo.file_path_web}
-                      alt={photo.original_filename}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition duration-300 flex flex-col justify-end p-4">
-                      <div className="flex items-center justify-between text-xs text-white">
-                        <span className="truncate max-w-[130px] font-mono text-[11px]">{photo.original_filename}</span>
-                        <a
-                          href={`/api/photos/${photo.id}/download`}
-                          download
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-2 rounded-full bg-[#f00000] text-white hover:bg-white hover:text-black transition"
-                          title="Télécharger HD"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </a>
-                      </div>
-                    </div>
-                    {photo.score && (
-                      <div className="absolute top-3 right-3 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-full kicker text-[10px] text-white border border-white/20">
-                        {Math.round(photo.score * 100)}%
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </section>
       )}
 
-      {/* Explore full ceremony */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-12">
-        <div className="text-center mb-6">
-          <button
-            onClick={() => setShowAllPhotos(prev => !prev)}
-            className="godthic-pill py-3 px-6"
-          >
-            <ImageIcon className="w-4 h-4 mr-2 text-[#f00000]" />
-            {showAllPhotos ? "MASQUER L'ALBUM GÉNÉRAL" : `VOIR LES ${allPhotos.length} PHOTOS DE LA CÉRÉMONIE`}
-          </button>
-        </div>
-
-        {showAllPhotos && (
-          <div className="godthic-glass rounded-3xl p-8 sm:p-12">
-            <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/10">
-              <h4 className="text-2xl font-bold uppercase tracking-[-0.04em] text-white">
-                Toutes les photos ({allPhotos.length})
-              </h4>
+      {/* View Switcher Tabs (Mes Photos vs Toute la cérémonie) */}
+      <section className="max-w-6xl mx-auto px-6 sm:px-12 mb-8">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2 p-1 bg-white/5 border border-white/10 rounded-full">
+            {searchResults && searchResults.length > 0 && (
               <button
-                onClick={() => handleDownloadZip(allPhotos)}
-                disabled={downloadingZip}
-                className="kicker flex items-center gap-1.5 text-white hover:text-[#f00000] transition"
+                onClick={() => setActiveTab('matches')}
+                className={`px-5 py-2 rounded-full text-xs font-mono uppercase tracking-wider transition ${
+                  activeTab === 'matches'
+                    ? 'bg-[#f00000] text-white font-bold shadow-[0_0_12px_rgba(240,0,0,0.5)]'
+                    : 'text-[#888] hover:text-white'
+                }`}
               >
-                <Download className="w-4 h-4" /> TÉLÉCHARGER TOUT L'ALBUM (.ZIP)
+                Mes Photos ({searchResults.length})
               </button>
-            </div>
+            )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {allPhotos.map((photo, idx) => (
-                <div
-                  key={photo.id}
-                  className="godthic-glass-card rounded-xl overflow-hidden aspect-square relative cursor-pointer group"
-                  onClick={() => {
-                    setLightboxMode('all');
-                    setSelectedPhotoIndex(idx);
-                  }}
-                >
-                  <img
-                    src={photo.file_path_thumb || photo.file_path_web}
-                    alt={photo.original_filename}
-                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-5 py-2 rounded-full text-xs font-mono uppercase tracking-wider transition ${
+                activeTab === 'all'
+                  ? 'bg-white text-black font-bold shadow-lg'
+                  : 'text-[#888] hover:text-white'
+              }`}
+            >
+              Toute la Cérémonie ({allPhotos.length})
+            </button>
+          </div>
+
+          {/* Bulk Download ZIP button */}
+          {displayedPhotos.length > 0 && (
+            <button
+              onClick={() => handleDownloadZip(displayedPhotos)}
+              disabled={downloadingZip}
+              className="godthic-pill-red text-xs py-2.5 px-5"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {downloadingZip 
+                ? "CRÉATION ZIP..." 
+                : activeTab === 'matches' 
+                  ? `TÉLÉCHARGER MES PHOTOS HD (${displayedPhotos.length})` 
+                  : `TÉLÉCHARGER TOUT L'ALBUM (.ZIP)`
+              }
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* Photos Grid */}
+      <section className="max-w-6xl mx-auto px-6 sm:px-12">
+        {displayedPhotos.length === 0 ? (
+          <div className="godthic-glass rounded-3xl p-12 text-center max-w-md mx-auto">
+            <p className="text-xs text-[#ababab]">Aucune photo à afficher dans cette sélection.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-5">
+            {displayedPhotos.map((photo, idx) => (
+              <div
+                key={photo.id}
+                className="godthic-glass-card rounded-2xl overflow-hidden aspect-[4/5] relative cursor-pointer group border border-white/10 hover:border-[#f00000]/60 transition duration-300"
+                onClick={() => setSelectedPhotoIndex(idx)}
+              >
+                <img
+                  src={photo.file_path_thumb || photo.file_path_web || photo.file_path_hd}
+                  alt={photo.original_filename}
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                  loading="lazy"
+                />
+
+                {/* Subtle Hover Action Bar */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-0 group-hover:opacity-100 transition duration-300 flex flex-col justify-end p-3">
+                  <div className="flex items-center justify-between text-xs text-white">
+                    <span className="truncate max-w-[100px] font-mono text-[10px] text-[#ababab]">
+                      {photo.original_filename}
+                    </span>
                     <a
                       href={`/api/photos/${photo.id}/download`}
                       download
                       onClick={(e) => e.stopPropagation()}
-                      className="p-3 rounded-full bg-[#f00000] text-white hover:bg-white hover:text-black transition"
+                      className="p-1.5 rounded-full bg-[#f00000] text-white hover:bg-white hover:text-black transition"
+                      title="Télécharger HD"
                     >
-                      <Download className="w-4 h-4" />
+                      <Download className="w-3.5 h-3.5" />
                     </a>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Match score badge if present */}
+                {photo.score && (
+                  <div className="absolute top-2.5 right-2.5 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-full kicker text-[9px] text-white border border-white/20">
+                    {Math.round(photo.score * 100)}%
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -414,15 +350,18 @@ export default function GuestView({ eventSlug, onBackToAdmin }) {
         />
       )}
 
-      {/* Lightbox Modal */}
-      {selectedPhotoIndex !== null && (
+      {/* Enhanced Lightbox Modal with Zoom, Swipe, and Thumbnails */}
+      {selectedPhotoIndex !== null && currentLightboxPhoto && (
         <Lightbox
           photo={currentLightboxPhoto}
+          photos={displayedPhotos}
+          currentIndex={selectedPhotoIndex}
           onClose={() => setSelectedPhotoIndex(null)}
           hasPrev={selectedPhotoIndex > 0}
-          hasNext={selectedPhotoIndex < activePhotos.length - 1}
+          hasNext={selectedPhotoIndex < displayedPhotos.length - 1}
           onPrev={() => setSelectedPhotoIndex(i => i - 1)}
           onNext={() => setSelectedPhotoIndex(i => i + 1)}
+          onSelectIndex={(idx) => setSelectedPhotoIndex(idx)}
         />
       )}
     </div>

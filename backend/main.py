@@ -448,6 +448,85 @@ async def search_by_face(
     }
 
 
+@app.post("/api/search-by-face-global")
+async def search_by_face_global(
+    selfie: Optional[UploadFile] = File(None),
+    selfie_base64: Optional[str] = Form(None),
+    threshold: float = Form(0.44)
+):
+    """
+    Scans a guest selfie across ALL published events.
+    Returns ONLY events where this person appears.
+    Strict threshold (0.44) eliminates false likeness / false positive matches.
+    """
+    engine = get_face_engine()
+
+    if selfie:
+        image_bytes = await selfie.read()
+    elif selfie_base64:
+        if "," in selfie_base64:
+            selfie_base64 = selfie_base64.split(",")[1]
+        try:
+            image_bytes = base64.b64decode(selfie_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Base64 invalide")
+    else:
+        raise HTTPException(status_code=400, detail="Veuillez fournir une photo.")
+
+    ok, query_embedding, msg = engine.extract_single_face_embedding(image_bytes)
+    if not ok or query_embedding is None:
+        return {
+            "success": False,
+            "message": msg or "Aucun visage net détecté sur la photo.",
+            "events": []
+        }
+
+    all_faces = db.get_all_faces_with_events()
+    if not all_faces:
+        return {
+            "success": True,
+            "message": "Aucun visage indexé dans la base de données.",
+            "events": []
+        }
+
+    matches = engine.match_embeddings(query_embedding, all_faces, threshold=threshold)
+
+    # Group matched photos by event_slug
+    events_map = {}
+    for m in matches:
+        photo = db.get_photo_by_id(m["photo_id"])
+        if not photo:
+            continue
+        slug = photo["event_slug"]
+        if slug not in events_map:
+            ev = db.get_event_by_slug(slug)
+            if not ev:
+                continue
+            all_photos = db.get_event_photos(slug)
+            events_map[slug] = {
+                "slug": slug,
+                "title": ev["title"],
+                "event_date": ev.get("event_date", ""),
+                "location": ev.get("location", ""),
+                "cover_photo": ev.get("cover_photo", ""),
+                "total_photos_count": len(all_photos),
+                "matched_photos": []
+            }
+        p_dict = dict(photo)
+        p_dict["score"] = m["max_score"]
+        events_map[slug]["matched_photos"].append(p_dict)
+
+    matched_events_list = list(events_map.values())
+
+    return {
+        "success": True,
+        "message": f"{len(matched_events_list)} événement(s) trouvé(s) avec votre profil.",
+        "events_count": len(matched_events_list),
+        "total_matched_photos": sum(len(e["matched_photos"]) for e in matched_events_list),
+        "events": matched_events_list
+    }
+
+
 @app.get("/api/photos/{photo_id}/download")
 def download_hd_photo(photo_id: str):
     photo = db.get_photo_by_id(photo_id)

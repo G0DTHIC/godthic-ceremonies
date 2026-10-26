@@ -163,6 +163,40 @@ def get_event_face_embeddings(event_slug: str) -> List[Dict[str, Any]]:
         })
     return results
 
+def get_all_faces_with_events() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT f.photo_id, f.event_slug, f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h, f.score, f.embedding_json,
+               p.original_filename, p.file_path_hd, p.file_path_web, p.file_path_thumb, p.width, p.height,
+               e.title as event_title, e.event_date, e.location
+        FROM face_embeddings f
+        JOIN photos p ON f.photo_id = p.id
+        JOIN events e ON f.event_slug = e.slug
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    results = []
+    for r in rows:
+        results.append({
+            "photo_id": r["photo_id"],
+            "event_slug": r["event_slug"],
+            "event_title": r["event_title"],
+            "event_date": r["event_date"],
+            "location": r["location"],
+            "original_filename": r["original_filename"],
+            "file_path_hd": r["file_path_hd"],
+            "file_path_web": r["file_path_web"],
+            "file_path_thumb": r["file_path_thumb"],
+            "width": r["width"],
+            "height": r["height"],
+            "bbox": [r["bbox_x"], r["bbox_y"], r["bbox_w"], r["bbox_h"]],
+            "score": r["score"],
+            "embedding": json.loads(r["embedding_json"])
+        })
+    return results
+
 def delete_photo(photo_id: str):
     conn = get_connection()
     cursor = conn.cursor()
