@@ -1,0 +1,16 @@
+# Virtual environment
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Local storage and database
+backend/storage/
+backend/database.db
+backend/models/*.onnx
+
+# Frontend dependencies
+frontend/node_modules/
+frontend/.vite/
+
+# Local Windows launcher
+demarrer.bat

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logos/logo-godthic-metal.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GODTHIC — Photo Cérémonie | Visual Archives & Facial AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['"Helvetica Neue"', 'Helvetica', 'Arial', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+              display: ['"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+            },
+            colors: {
+              godthic: {
+                black: '#000000',
+                ink: '#101010',
+                line: '#292929',
+                red: '#f00000',
+                redDeep: '#dc2626',
+                muted: '#ababab',
+              }
+            }
+          }
+        }
+      }
+    </script>
+  </head>
+  <body class="bg-black text-white min-h-screen font-sans antialiased selection:bg-[#f00000] selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,199 @@
+/* ============================================================
+   GODTHIC DESIGN SYSTEM — INSPIRÉ DIRECTEMENT DE GGODTHICC.COM
+   Directeur Artistique : Luqman Doumbia
+   ============================================================ */
+
+:root {
+  --black: #000000;
+  --white: #ffffff;
+  --red: #f00000;
+  --red-deep: #dc2626;
+  --ink: #101010;
+  --line: #292929;
+  --muted: #ababab;
+  --font-stack: "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  font-family: var(--font-stack);
+  background: var(--black);
+  color: var(--white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Kicker Signature ggodthicc.com */
+.kicker {
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--red);
+}
+
+.kicker-white {
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--white);
+  opacity: 0.85;
+}
+
+/* ============================================================
+   SHADER VERRE LIQUIDE TRANSLUCIDE (Directement issu de ggodthicc.com)
+   Shader Verre : 154deg, Réfraction, Specular Highlight Inset 1px
+   ============================================================ */
+.godthic-glass {
+  background: linear-gradient(154deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 26%, rgba(18, 18, 22, 0.50) 58%, rgba(8, 8, 12, 0.85) 100%);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border-top: 1px solid rgba(255, 255, 255, 0.40);
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.7),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+.godthic-glass-subtle {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.godthic-glass-card {
+  background: linear-gradient(154deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.03) 26%, rgba(14, 14, 18, 0.65) 58%, rgba(6, 6, 9, 0.90) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: 1px solid rgba(255, 255, 255, 0.10);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.godthic-glass-card:hover {
+  background: linear-gradient(154deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 26%, rgba(26, 12, 14, 0.75) 58%, rgba(12, 4, 6, 0.95) 100%);
+  border-top-color: rgba(255, 255, 255, 0.55);
+  border-left-color: rgba(240, 0, 0, 0.5);
+  border-bottom-color: rgba(240, 0, 0, 0.3);
+  box-shadow: 
+    0 24px 50px rgba(0, 0, 0, 0.8),
+    0 0 30px rgba(240, 0, 0, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px);
+}
+
+/* Pill Glass Button (Style nav-client de ggodthicc.com) */
+.godthic-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  font-family: var(--font-stack);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.godthic-pill:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.3);
+}
+
+.godthic-pill-red {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-family: var(--font-stack);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-decoration: none;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 20px rgba(240, 0, 0, 0.45);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.godthic-pill-red:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.6);
+  transform: translateY(-1px);
+}
+
+/* Glass Inputs */
+.godthic-input {
+  background: rgba(8, 8, 12, 0.7);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-family: var(--font-stack);
+  transition: all 0.2s ease;
+}
+
+.godthic-input:focus {
+  outline: none;
+  border-color: var(--red);
+  box-shadow: 0 0 16px rgba(240, 0, 0, 0.4);
+}
+
+/* Ambient Gradient de ggodthicc.com */
+.presence-gradient {
+  background: linear-gradient(140deg, #000000 55%, #180204 100%);
+}
+
+/* Laser scan animation */
+@keyframes scan-laser {
+  0% { top: 0%; opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { top: 100%; opacity: 0.6; }
+}
+
+.animate-scan-laser {
+  animation: scan-laser 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite alternate;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #000;
+}
+::-webkit-scrollbar-thumb {
+  background: #292929;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--red);
+}
