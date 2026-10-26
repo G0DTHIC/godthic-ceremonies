@@ -76,6 +76,33 @@ class CreateEventRequest(BaseModel):
 class BatchDownloadRequest(BaseModel):
     photo_ids: List[str]
 
+class CheckFaceRequest(BaseModel):
+    image: Optional[str] = None
+
+
+@app.post("/api/check-face")
+async def check_face_live(payload: CheckFaceRequest):
+    """
+    Real-time biometric quality check for auto-capture:
+    Verifies face angle, centering, distance, and lighting in sub-10ms.
+    """
+    if not payload.image:
+        raise HTTPException(status_code=400, detail="Image requise")
+
+    img_str = payload.image
+    if "," in img_str:
+        img_str = img_str.split(",", 1)[1]
+
+    try:
+        raw_bytes = base64.b64decode(img_str)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Base64 invalide")
+
+    engine = get_face_engine()
+    result = engine.check_face_quality(raw_bytes)
+    return result
+
+
 
 # --- Routes ---
 

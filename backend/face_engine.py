@@ -121,6 +121,157 @@ class FaceEngine:
 
         return True, embedding, "Visage détecté avec succès"
 
+    def check_face_quality(self, image_bytes: bytes) -> Dict[str, Any]:
+        """
+        Fast biometric quality check on a live preview frame (e.g. 320x240 or 400x300).
+        Verifies:
+        1. Presence of exactly 1 face
+        2. Roll angle (head straight, eyes horizontal)
+        3. Yaw angle (facing camera directly)
+        4. Centering inside the guide
+        5. Distance / face size
+        6. Lighting (brightness & contrast on face region)
+        """
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return {"ready": False, "status": "ERROR", "message": "Format d'image non valide"}
+
+        h, w = img.shape[:2]
+        detector = self._get_detector(w, h)
+        _, faces = detector.detect(img)
+
+        if faces is None or len(faces) == 0:
+            return {
+                "ready": False,
+                "status": "NO_FACE",
+                "message": "Placez votre visage dans l'ovale",
+                "lighting_ok": True
+            }
+
+        if len(faces) > 1:
+            return {
+                "ready": False,
+                "status": "MULTIPLE_FACES",
+                "message": "Un seul visage à la fois dans le viseur",
+                "lighting_ok": True
+            }
+
+        face = faces[0]
+        x, y, fw, fh = face[0:4]
+        re_x, re_y = face[4:6]
+        le_x, le_y = face[6:8]
+        nt_x, nt_y = face[8:10]
+        score = float(face[14])
+
+        if score < 0.65:
+            return {
+                "ready": False,
+                "status": "LOW_CONFIDENCE",
+                "message": "Visage partiellement masqué ou flou",
+                "lighting_ok": True
+            }
+
+        # 1. Roll angle (tête inclinée sur le côté)
+        dx = le_x - re_x
+        dy = le_y - re_y
+        roll_deg = abs(float(np.degrees(np.arctan2(dy, dx))))
+        if roll_deg > 15.0:
+            return {
+                "ready": False,
+                "status": "TILTED",
+                "message": "Tenez votre tête bien droite",
+                "roll": round(roll_deg, 1)
+            }
+
+        # 2. Yaw orientation (regard de profil ou tourné)
+        d_re = abs(nt_x - re_x)
+        d_le = abs(nt_x - le_x)
+        yaw_ratio = d_re / max(d_le, 1e-4)
+        if yaw_ratio < 0.42 or yaw_ratio > 2.38:
+            return {
+                "ready": False,
+                "status": "SIDEWAYS",
+                "message": "Regardez droit vers l'objectif",
+                "yaw_ratio": round(yaw_ratio, 2)
+            }
+
+        # 3. Centering
+        cx = x + fw / 2.0
+        cy = y + fh / 2.0
+        ox = (cx - w / 2.0) / w
+        oy = (cy - h / 2.0) / h
+
+        if abs(ox) > 0.22:
+            return {
+                "ready": False,
+                "status": "OFF_CENTER",
+                "message": "Centrez votre visage horizontalement"
+            }
+
+        if abs(oy) > 0.26:
+            return {
+                "ready": False,
+                "status": "OFF_CENTER",
+                "message": "Ajustez la hauteur de votre visage"
+            }
+
+        # 4. Distance / Face Size
+        area_ratio = (fw * fh) / float(w * h)
+        if area_ratio < 0.08:
+            return {
+                "ready": False,
+                "status": "TOO_FAR",
+                "message": "Rapprochez-vous du viseur"
+            }
+        if area_ratio > 0.65:
+            return {
+                "ready": False,
+                "status": "TOO_CLOSE",
+                "message": "Éloignez-vous légèrement"
+            }
+
+        # 5. Lighting & Contrast on face crop
+        x1, y1 = max(0, int(x)), max(0, int(y))
+        x2, y2 = min(w, int(x + fw)), min(h, int(y + fh))
+        face_crop = img[y1:y2, x1:x2]
+
+        if face_crop.size > 0:
+            gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+            mean_b = float(np.mean(gray))
+            contrast = float(np.std(gray))
+
+            if mean_b < 58.0:
+                return {
+                    "ready": False,
+                    "status": "TOO_DARK",
+                    "message": "Éclairage trop faible : cherchez la lumière",
+                    "brightness": round(mean_b, 1)
+                }
+            if mean_b > 230.0:
+                return {
+                    "ready": False,
+                    "status": "TOO_BRIGHT",
+                    "message": "Trop de lumière ou contre-jour",
+                    "brightness": round(mean_b, 1)
+                }
+            if contrast < 16.0:
+                return {
+                    "ready": False,
+                    "status": "LOW_CONTRAST",
+                    "message": "Image floue ou manque de contraste"
+                }
+
+        # ALL CRITERIA MET!
+        return {
+            "ready": True,
+            "status": "OPTIMAL",
+            "message": "CONDITIONS OPTIMALES • RESTEZ IMMOBILE",
+            "bbox": [int(x), int(y), int(fw), int(fh)],
+            "roll": round(roll_deg, 1),
+            "score": round(score, 2)
+        }
+
     @staticmethod
     def match_embeddings(
         query_embedding: List[float],

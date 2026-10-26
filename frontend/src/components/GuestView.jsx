@@ -209,12 +209,12 @@ export default function GuestView({ eventSlug, onBackToAdmin }) {
       <section className="max-w-2xl mx-auto px-6 -mt-4 mb-16">
         <div className="godthic-glass rounded-3xl p-8 sm:p-12 relative overflow-hidden">
           <div className="text-center mb-8">
-            <p className="kicker mb-2">SCAN DU VISAGE EN 1 CLIC</p>
+            <p className="kicker mb-2">SCAN BIOMÉTRIQUE SANS CONTACT</p>
             <h2 className="text-2xl sm:text-4xl font-bold tracking-[-0.05em] uppercase text-white">
               Retrouvez Vos Photos
             </h2>
             <p className="text-xs sm:text-sm text-[#d0d0d0] mt-3 max-w-md mx-auto leading-relaxed">
-              Prenez un selfie ou importez une photo de vous. L'IA isole instantanément vos apparitions dans la cérémonie.
+              Placez-vous devant la caméra. Dès que l'angle et la lumière sont parfaits, la photo se déclenche automatiquement sans toucher l'écran.
             </p>
           </div>
 
@@ -226,7 +226,7 @@ export default function GuestView({ eventSlug, onBackToAdmin }) {
               className="godthic-pill-red justify-center py-4 text-xs tracking-wider"
             >
               <Camera className="w-4 h-4 mr-2" />
-              PRENDRE UN SELFIE
+              SCAN FACIAL AUTO
             </button>
 
             <label className="godthic-pill justify-center py-4 text-xs tracking-wider cursor-pointer">
