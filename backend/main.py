@@ -1,6 +1,8 @@
 import os
 import sys
 import io
+import shutil
+import gc
 
 # Ensure backend directory is in sys.path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -222,6 +224,138 @@ async def upload_photos(slug: str, files: List[UploadFile] = File(...)):
         "total_faces_detected": total_faces_detected,
         "photos": uploaded_photos
     }
+
+
+@app.post("/api/events/{slug}/upload-single")
+async def upload_single_photo(slug: str, file: UploadFile = File(...)):
+    event = db.get_event_by_slug(slug)
+    if not event:
+        raise HTTPException(status_code=404, detail="Événement introuvable.")
+
+    hd_dir, web_dir, thumb_dir = get_event_dirs(slug)
+    engine = get_face_engine()
+
+    photo_id = str(uuid.uuid4())
+    ext = os.path.splitext(file.filename)[1].lower() or ".jpg"
+
+    hd_path = os.path.join(hd_dir, f"{photo_id}{ext}")
+    web_path = os.path.join(web_dir, f"{photo_id}.webp")
+    thumb_path = os.path.join(thumb_dir, f"{photo_id}.webp")
+
+    # Stream write to disk directly in chunks (never hold whole file in RAM)
+    try:
+        with open(hd_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        await file.close()
+
+    # Generate WebP & Thumb versions with PIL, carefully releasing memory
+    width, height = 0, 0
+    try:
+        with Image.open(hd_path) as img:
+            width, height = img.size
+            rgb_img = img.convert("RGB")
+            
+            # Web version (max 1920px)
+            web_img = rgb_img.copy()
+            web_img.thumbnail((1920, 1920), Image.Resampling.LANCZOS)
+            web_img.save(web_path, "WEBP", quality=82)
+            del web_img
+
+            # Thumb version (max 600px)
+            thumb_img = rgb_img.copy()
+            thumb_img.thumbnail((600, 600), Image.Resampling.LANCZOS)
+            thumb_img.save(thumb_path, "WEBP", quality=78)
+            del thumb_img
+
+            del rgb_img
+    except Exception as e:
+        print(f"PIL conversion error: {e}")
+        web_path = hd_path
+        thumb_path = hd_path
+
+    rel_hd = f"/storage/{slug}/hd/{photo_id}{ext}"
+    rel_web = f"/storage/{slug}/web/{photo_id}.webp"
+    rel_thumb = f"/storage/{slug}/thumb/{photo_id}.webp"
+
+    db.add_photo(
+        photo_id=photo_id,
+        event_slug=slug,
+        original_filename=file.filename,
+        file_path_hd=rel_hd,
+        file_path_web=rel_web,
+        file_path_thumb=rel_thumb,
+        width=width,
+        height=height
+    )
+
+    # Face extraction
+    faces_detected = 0
+    try:
+        faces = engine.process_image(hd_path)
+        for face in faces:
+            db.add_face_embedding(
+                photo_id=photo_id,
+                event_slug=slug,
+                bbox=face["bbox"],
+                score=face["score"],
+                embedding=face["embedding"]
+            )
+        faces_detected = len(faces)
+    except Exception as e:
+        print(f"Face extraction error for {file.filename}: {e}")
+
+    # Force garbage collection to keep RAM usage under 30MB
+    gc.collect()
+
+    return {
+        "success": True,
+        "photo": {
+            "id": photo_id,
+            "filename": file.filename,
+            "thumb": rel_thumb,
+            "faces_count": faces_detected
+        }
+    }
+
+
+@app.delete("/api/photos/{photo_id}")
+def delete_photo(photo_id: str):
+    photo = db.get_photo_by_id(photo_id)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo introuvable.")
+
+    for key in ["file_path_hd", "file_path_web", "file_path_thumb"]:
+        p = photo.get(key)
+        if p and p.startswith("/storage/"):
+            rel_path = p.lstrip("/storage/")
+            abs_path = os.path.join(STORAGE_DIR, rel_path)
+            if os.path.exists(abs_path):
+                try:
+                    os.remove(abs_path)
+                except Exception as e:
+                    print(f"Error removing file {abs_path}: {e}")
+
+    db.delete_photo(photo_id)
+    return {"success": True, "message": "Photo supprimée avec succès."}
+
+
+@app.delete("/api/events/{slug}")
+def delete_event(slug: str):
+    event = db.get_event_by_slug(slug)
+    if not event:
+        raise HTTPException(status_code=404, detail="Événement introuvable.")
+
+    event_dir = os.path.join(STORAGE_DIR, slug)
+    if os.path.exists(event_dir):
+        try:
+            shutil.rmtree(event_dir)
+        except Exception as e:
+            print(f"Error removing event dir {event_dir}: {e}")
+
+    db.delete_event(slug)
+    return {"success": True, "message": "Cérémonie supprimée avec succès."}
+
 
 
 @app.post("/api/events/{slug}/search-by-face")

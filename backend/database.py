@@ -162,3 +162,21 @@ def get_event_face_embeddings(event_slug: str) -> List[Dict[str, Any]]:
             "embedding": json.loads(r["embedding_json"])
         })
     return results
+
+def delete_photo(photo_id: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM face_embeddings WHERE photo_id = ?", (photo_id,))
+    cursor.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
+    conn.commit()
+    conn.close()
+
+def delete_event(slug: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM face_embeddings WHERE event_slug = ?", (slug,))
+    cursor.execute("DELETE FROM photos WHERE event_slug = ?", (slug,))
+    cursor.execute("DELETE FROM events WHERE slug = ?", (slug,))
+    conn.commit()
+    conn.close()
+
