@@ -13,13 +13,14 @@ import base64
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
 
 import database as db
 from face_engine import FaceEngine
+import r2_storage
 
 # Base directory for storage
 BASE_DIR = os.path.dirname(__file__)
@@ -37,8 +38,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize DB
+# Restore remote database from Cloudflare R2 on startup if it exists
+r2_storage.restore_database_if_needed(db.DB_PATH)
 db.init_db()
+
+@app.on_event("startup")
+def on_app_startup():
+    r2_storage.restore_database_if_needed(db.DB_PATH)
+    db.init_db()
+
 
 # Lazy-loaded FaceEngine singleton
 _face_engine = None
@@ -138,6 +146,7 @@ def create_event(payload: CreateEventRequest):
         location=payload.location or "",
         passcode=payload.passcode or ""
     )
+    r2_storage.backup_database(db.DB_PATH)
     return event
 
 
@@ -276,7 +285,7 @@ async def upload_single_photo(slug: str, file: UploadFile = File(...)):
     finally:
         await file.close()
 
-    # Generate WebP & Thumb versions with PIL, carefully releasing memory
+    # Web & Thumb versions with PIL
     width, height = 0, 0
     try:
         with Image.open(hd_path) as img:
@@ -301,9 +310,23 @@ async def upload_single_photo(slug: str, file: UploadFile = File(...)):
         web_path = hd_path
         thumb_path = hd_path
 
-    rel_hd = f"/storage/{slug}/hd/{photo_id}{ext}"
-    rel_web = f"/storage/{slug}/web/{photo_id}.webp"
-    rel_thumb = f"/storage/{slug}/thumb/{photo_id}.webp"
+    # Permanent Cloudflare R2 Upload
+    r2_key_hd = f"{slug}/hd/{photo_id}{ext}"
+    r2_key_web = f"{slug}/web/{photo_id}.webp"
+    r2_key_thumb = f"{slug}/thumb/{photo_id}.webp"
+
+    try:
+        r2_storage.upload_file(hd_path, r2_key_hd, content_type=file.content_type or "image/jpeg")
+        if os.path.exists(web_path):
+            r2_storage.upload_file(web_path, r2_key_web, content_type="image/webp")
+        if os.path.exists(thumb_path):
+            r2_storage.upload_file(thumb_path, r2_key_thumb, content_type="image/webp")
+    except Exception as e:
+        print(f"R2 storage upload error: {e}")
+
+    rel_hd = f"/api/r2/{r2_key_hd}"
+    rel_web = f"/api/r2/{r2_key_web}"
+    rel_thumb = f"/api/r2/{r2_key_thumb}"
 
     db.add_photo(
         photo_id=photo_id,
@@ -332,6 +355,20 @@ async def upload_single_photo(slug: str, file: UploadFile = File(...)):
     except Exception as e:
         print(f"Face extraction error for {file.filename}: {e}")
 
+    # Backup database to R2 permanently
+    r2_storage.backup_database(db.DB_PATH)
+
+    # Clean up local temp files to preserve container memory and disk
+    try:
+        if os.path.exists(web_path) and web_path != hd_path:
+            os.remove(web_path)
+        if os.path.exists(thumb_path) and thumb_path != hd_path:
+            os.remove(thumb_path)
+        if os.path.exists(hd_path):
+            os.remove(hd_path)
+    except Exception:
+        pass
+
     # Force garbage collection to keep RAM usage under 30MB
     gc.collect()
 
@@ -354,16 +391,18 @@ def delete_photo(photo_id: str):
 
     for key in ["file_path_hd", "file_path_web", "file_path_thumb"]:
         p = photo.get(key)
-        if p and p.startswith("/storage/"):
-            rel_path = p.lstrip("/storage/")
-            abs_path = os.path.join(STORAGE_DIR, rel_path)
+        if p:
+            r2_key = p.lstrip("/storage/").replace("/api/r2/", "")
+            r2_storage.delete_file(r2_key)
+            abs_path = os.path.join(STORAGE_DIR, r2_key)
             if os.path.exists(abs_path):
                 try:
                     os.remove(abs_path)
-                except Exception as e:
-                    print(f"Error removing file {abs_path}: {e}")
+                except Exception:
+                    pass
 
     db.delete_photo(photo_id)
+    r2_storage.backup_database(db.DB_PATH)
     return {"success": True, "message": "Photo supprimée avec succès."}
 
 
@@ -373,6 +412,9 @@ def delete_event(slug: str):
     if not event:
         raise HTTPException(status_code=404, detail="Événement introuvable.")
 
+    # Delete all objects in Cloudflare R2 for this event
+    r2_storage.delete_prefix(f"{slug}/")
+
     event_dir = os.path.join(STORAGE_DIR, slug)
     if os.path.exists(event_dir):
         try:
@@ -381,6 +423,7 @@ def delete_event(slug: str):
             print(f"Error removing event dir {event_dir}: {e}")
 
     db.delete_event(slug)
+    r2_storage.backup_database(db.DB_PATH)
     return {"success": True, "message": "Cérémonie supprimée avec succès."}
 
 
@@ -527,24 +570,39 @@ async def search_by_face_global(
     }
 
 
+@app.get("/api/r2/{key:path}")
+def serve_r2_media(key: str):
+    """
+    Serves images stored in Cloudflare R2 via presigned redirect or local cache.
+    """
+    local_path = os.path.join(STORAGE_DIR, key)
+    if os.path.exists(local_path):
+        return FileResponse(local_path)
+
+    presigned_url = r2_storage.get_presigned_url(key)
+    return RedirectResponse(url=presigned_url, status_code=307)
+
+
 @app.get("/api/photos/{photo_id}/download")
 def download_hd_photo(photo_id: str):
     photo = db.get_photo_by_id(photo_id)
     if not photo:
         raise HTTPException(status_code=404, detail="Photo introuvable.")
 
-    # Convert relative web path to absolute file system path
-    rel_path = photo["file_path_hd"].lstrip("/storage/")
-    abs_path = os.path.join(STORAGE_DIR, rel_path)
+    p_hd = photo["file_path_hd"]
+    r2_key = p_hd.lstrip("/storage/").replace("/api/r2/", "")
 
-    if not os.path.exists(abs_path):
-        raise HTTPException(status_code=404, detail="Fichier original introuvable sur le disque.")
+    local_path = os.path.join(STORAGE_DIR, r2_key)
+    if os.path.exists(local_path):
+        return FileResponse(
+            path=local_path,
+            filename=photo["original_filename"],
+            media_type="application/octet-stream"
+        )
 
-    return FileResponse(
-        path=abs_path,
-        filename=photo["original_filename"],
-        media_type="application/octet-stream"
-    )
+    # Redirect to presigned Cloudflare R2 download URL
+    download_url = r2_storage.get_presigned_url(r2_key)
+    return RedirectResponse(url=download_url, status_code=307)
 
 
 @app.post("/api/events/{slug}/download-zip")
@@ -562,10 +620,15 @@ def download_photos_zip(slug: str, payload: BatchDownloadRequest):
         for photo_id in payload.photo_ids:
             photo = db.get_photo_by_id(photo_id)
             if photo and photo["event_slug"] == slug:
-                rel_path = photo["file_path_hd"].lstrip("/storage/")
-                abs_path = os.path.join(STORAGE_DIR, rel_path)
-                if os.path.exists(abs_path):
-                    zip_file.write(abs_path, arcname=photo["original_filename"])
+                p_hd = photo["file_path_hd"]
+                r2_key = p_hd.lstrip("/storage/").replace("/api/r2/", "")
+                local_path = os.path.join(STORAGE_DIR, r2_key)
+                if os.path.exists(local_path):
+                    zip_file.write(local_path, arcname=photo["original_filename"])
+                else:
+                    data = r2_storage.get_object_bytes(r2_key)
+                    if data:
+                        zip_file.writestr(photo["original_filename"], data)
 
     zip_buffer.seek(0)
     zip_filename = f"{slug}-photos-hd.zip"
